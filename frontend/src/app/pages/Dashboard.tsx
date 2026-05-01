@@ -1,132 +1,138 @@
-import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Activity, Plus, ArrowRight } from "lucide-react";
-
-const overviewCards = [
-  { label: "Total Revenue", value: "$45,231.89", change: "+20.1%", trend: "up", icon: DollarSign },
-  { label: "Active Users", value: "2,350", change: "+180", trend: "up", icon: Users },
-  { label: "Sales", value: "12,234", change: "+19%", trend: "up", icon: ShoppingCart },
-  { label: "Active Now", value: "573", change: "-12", trend: "down", icon: Activity },
-];
+import { ArrowRight, FileText, Mail, Plus, Video } from "lucide-react";
+import { Link } from "react-router";
+import { MetricCard } from "../components/MetricCard";
+import { PriorityBadge } from "../components/PriorityBadge";
+import { StateBlock } from "../components/StateBlock";
+import { useAsyncResource } from "../hooks/useAsyncResource";
+import { api } from "../lib/api";
 
 const quickActions = [
-  { label: "Create Document", icon: Plus },
-  { label: "Schedule Meeting", icon: Plus },
-  { label: "Draft Email", icon: Plus },
-  { label: "Add Task", icon: Plus },
-];
-
-const recentActivity = [
-  { action: "Document analyzed", item: "Q4 Report.pdf", time: "2 minutes ago" },
-  { action: "Meeting summarized", item: "Team Sync", time: "15 minutes ago" },
-  { action: "Email drafted", item: "Client Proposal", time: "1 hour ago" },
-  { action: "Task completed", item: "Review contracts", time: "2 hours ago" },
-  { action: "Document uploaded", item: "Budget 2026.xlsx", time: "3 hours ago" },
-];
-
-const pendingTasks = [
-  { task: "Review Q1 financial report", priority: "High", due: "Today" },
-  { task: "Prepare presentation slides", priority: "Medium", due: "Tomorrow" },
-  { task: "Update project timeline", priority: "Low", due: "This week" },
-  { task: "Schedule client call", priority: "High", due: "Today" },
+  { label: "Create Document", icon: FileText, route: "/documents" },
+  { label: "Schedule Meeting", icon: Video, route: "/meetings" },
+  { label: "Draft Email", icon: Mail, route: "/email" },
+  { label: "Add Task", icon: Plus, route: "/tasks" },
 ];
 
 export function Dashboard() {
+  const { data, error, isLoading, reload } = useAsyncResource(api.dashboard, []);
+
+  if (isLoading) {
+    return <StateBlock title="Loading workspace" description="Collecting tasks, activity, and AI insights." variant="loading" />;
+  }
+
+  if (error || !data) {
+    return (
+      <StateBlock
+        title="Dashboard unavailable"
+        description={error ?? "The workspace API did not return dashboard data."}
+        actionLabel="Retry"
+        onAction={reload}
+        variant="error"
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Overview Cards */}
-      <div className="grid grid-cols-4 gap-6">
-        {overviewCards.map((card) => {
-          const Icon = card.icon;
-          const TrendIcon = card.trend === "up" ? TrendingUp : TrendingDown;
-          return (
-            <div key={card.label} className="bg-card border border-border rounded-xl p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-muted-foreground">{card.label}</span>
-                <Icon className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <div className="mb-1">{card.value}</div>
-              <div className={`flex items-center gap-1 text-sm ${card.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                <TrendIcon className="w-4 h-4" />
-                <span>{card.change}</span>
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {data.metrics.map((metric, index) => (
+          <MetricCard key={metric.label} metric={metric} index={index} />
+        ))}
       </div>
 
-      {/* Quick Actions */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         {quickActions.map((action) => {
           const Icon = action.icon;
           return (
-            <button
+            <Link
               key={action.label}
-              className="flex items-center gap-2 px-4 h-10 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+              to={action.route}
+              className="flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-primary-foreground transition-opacity hover:opacity-90"
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="h-4 w-4" />
               <span>{action.label}</span>
-            </button>
+            </Link>
           );
         })}
       </div>
 
-      {/* Recent Activity & Pending Tasks */}
-      <div className="grid grid-cols-2 gap-6">
-        {/* Recent Activity */}
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3>Recent Activity</h3>
-            <button className="text-muted-foreground hover:text-foreground flex items-center gap-1">
-              View all
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            {recentActivity.map((item, i) => (
-              <div key={i} className="flex items-start justify-between">
-                <div>
-                  <div className="text-foreground">{item.action}</div>
-                  <div className="text-muted-foreground text-sm">{item.item}</div>
+      <section className="rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3>AI Insights</h3>
+          <Link to="/history" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            View history
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+        {data.insights.length ? (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {data.insights.map((insight) => (
+              <Link key={insight.id} to={insight.route} className="rounded-lg bg-muted p-4 transition-colors hover:bg-accent">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>{insight.title}</div>
+                  <span className="shrink-0 rounded bg-primary/10 px-2 py-1 text-xs text-primary">{insight.confidence}%</span>
                 </div>
-                <span className="text-muted-foreground text-sm whitespace-nowrap">{item.time}</span>
-              </div>
+                <p className="text-sm text-muted-foreground">{insight.summary}</p>
+              </Link>
             ))}
           </div>
-        </div>
+        ) : (
+          <StateBlock title="No insights yet" description="AI insights will appear after documents, emails, or meetings are processed." />
+        )}
+      </section>
 
-        {/* Pending Tasks */}
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3>Pending Tasks</h3>
-            <button className="text-muted-foreground hover:text-foreground flex items-center gap-1">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <section className="rounded-lg border border-border bg-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3>Recent Activity</h3>
+            <Link to="/history" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               View all
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
-          <div className="space-y-4">
-            {pendingTasks.map((item, i) => (
-              <div key={i} className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <input type="checkbox" className="mt-1" />
+          {data.activity.length ? (
+            <div className="space-y-4">
+              {data.activity.map((item) => (
+                <Link key={item.id} to={item.route} className="flex items-start justify-between gap-3 rounded-lg p-2 hover:bg-accent">
                   <div>
-                    <div className="text-foreground">{item.task}</div>
-                    <div className="text-muted-foreground text-sm">Due: {item.due}</div>
+                    <div>{item.action}</div>
+                    <div className="text-sm text-muted-foreground">{item.item}</div>
                   </div>
-                </div>
-                <span
-                  className={`px-2 py-1 rounded text-sm ${
-                    item.priority === "High"
-                      ? "bg-red-100 text-red-700"
-                      : item.priority === "Medium"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-blue-100 text-blue-700"
-                  }`}
-                >
-                  {item.priority}
-                </span>
-              </div>
-            ))}
+                  <span className="shrink-0 text-sm text-muted-foreground">{item.time}</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <StateBlock title="No activity yet" description="Workspace events will appear here as your team works." />
+          )}
+        </section>
+
+        <section className="rounded-lg border border-border bg-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3>Pending Tasks</h3>
+            <Link to="/tasks" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              View all
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
-        </div>
+          {data.tasks.length ? (
+            <div className="space-y-4">
+              {data.tasks.map((task) => (
+                <Link key={task.id} to="/tasks" className="flex items-start justify-between gap-3 rounded-lg p-2 hover:bg-accent">
+                  <div>
+                    <div>{task.title}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {task.assignee} · Due {new Date(task.due).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <PriorityBadge priority={task.priority} />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <StateBlock title="No pending tasks" description="Completed work is clear here. New AI-extracted tasks will show up automatically." />
+          )}
+        </section>
       </div>
     </div>
   );

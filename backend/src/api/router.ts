@@ -8,6 +8,7 @@ import { documentsRouter } from "./documents/routes.js";
 import { emailsRouter } from "./emails/routes.js";
 import { insightsRouter } from "./insights/routes.js";
 import { meetingsRouter } from "./meetings/routes.js";
+import { settingsRouter } from "./settings/routes.js";
 import { tasksRouter } from "./tasks/routes.js";
 
 export const apiRouter = Router();
@@ -25,3 +26,4 @@ apiRouter.use("/insights", insightsRouter);
 apiRouter.use("/activity", activityRouter);
 apiRouter.use("/ai", aiRouter);
 apiRouter.use("/dashboard", dashboardRouter);
+apiRouter.use("/settings", settingsRouter);

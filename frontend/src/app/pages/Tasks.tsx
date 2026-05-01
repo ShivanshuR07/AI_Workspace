@@ -1,188 +1,217 @@
-import { Filter, Plus, MoreVertical, LayoutGrid } from "lucide-react";
-import { useState } from "react";
-
-const tasks = [
-  { id: 1, title: "Review Q1 financial report", priority: "High", status: "In Progress", assignee: "Sarah Chen", due: "Apr 8, 2026" },
-  { id: 2, title: "Prepare presentation slides", priority: "Medium", status: "Not Started", assignee: "Mike Roberts", due: "Apr 9, 2026" },
-  { id: 3, title: "Update project timeline", priority: "Low", status: "In Progress", assignee: "Lisa Park", due: "Apr 12, 2026" },
-  { id: 4, title: "Schedule client call", priority: "High", status: "Not Started", assignee: "Tom Wilson", due: "Apr 8, 2026" },
-  { id: 5, title: "Review contracts", priority: "Medium", status: "Completed", assignee: "Emma Davis", due: "Apr 7, 2026" },
-  { id: 6, title: "Finalize budget allocation", priority: "High", status: "In Progress", assignee: "Sarah Chen", due: "Apr 10, 2026" },
-  { id: 7, title: "Conduct user interviews", priority: "Low", status: "Not Started", assignee: "Mike Roberts", due: "Apr 15, 2026" },
-  { id: 8, title: "Update documentation", priority: "Medium", status: "In Progress", assignee: "Lisa Park", due: "Apr 11, 2026" },
-];
+import { FormEvent, useMemo, useState } from "react";
+import { Filter, LayoutGrid, List, MoreVertical, Plus } from "lucide-react";
+import { PriorityBadge, StatusBadge } from "../components/PriorityBadge";
+import { StateBlock } from "../components/StateBlock";
+import { useAsyncResource } from "../hooks/useAsyncResource";
+import { api, type TaskPriority, type TaskStatus, type WorkspaceTask } from "../lib/api";
 
 const statusOptions = ["All", "Not Started", "In Progress", "Completed"];
 const priorityOptions = ["All", "High", "Medium", "Low"];
+const nextStatus: Record<TaskStatus, TaskStatus> = {
+  "Not Started": "In Progress",
+  "In Progress": "Completed",
+  Completed: "Not Started",
+};
 
 export function Tasks() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
+  const [view, setView] = useState<"table" | "kanban">("table");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [isMutating, setIsMutating] = useState(false);
+  const { data, error, isLoading, reload } = useAsyncResource(
+    () => api.tasks(statusFilter, priorityFilter),
+    [statusFilter, priorityFilter],
+  );
+
+  const tasks = data?.tasks ?? [];
+  const groupedTasks = useMemo(
+    () => ({
+      "Not Started": tasks.filter((task) => task.status === "Not Started"),
+      "In Progress": tasks.filter((task) => task.status === "In Progress"),
+      Completed: tasks.filter((task) => task.status === "Completed"),
+    }),
+    [tasks],
+  );
+
+  async function cycleTask(task: WorkspaceTask) {
+    setIsMutating(true);
+    await api.updateTask(task.id, nextStatus[task.status]);
+    await reload();
+    setIsMutating(false);
+  }
+
+  async function createTask(event: FormEvent) {
+    event.preventDefault();
+    if (!newTaskTitle.trim()) {
+      return;
+    }
+
+    setIsMutating(true);
+    await api.createTask(newTaskTitle.trim());
+    setNewTaskTitle("");
+    await reload();
+    setIsMutating(false);
+  }
 
   return (
     <div className="space-y-6">
-      {/* Filter Bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-muted-foreground" />
-            <span className="text-muted-foreground">Filters:</span>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Filter className="h-5 w-5" />
+            <span>Filters</span>
           </div>
-          <div className="flex gap-2">
-            {statusOptions.map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 h-9 rounded-lg transition-colors ${
-                  statusFilter === status
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-accent text-accent-foreground hover:bg-accent/80"
-                }`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
-          <div className="w-px h-6 bg-border" />
-          <div className="flex gap-2">
-            {priorityOptions.map((priority) => (
-              <button
-                key={priority}
-                onClick={() => setPriorityFilter(priority)}
-                className={`px-3 h-9 rounded-lg transition-colors ${
-                  priorityFilter === priority
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-accent text-accent-foreground hover:bg-accent/80"
-                }`}
-              >
-                {priority}
-              </button>
-            ))}
-          </div>
+          <SegmentedOptions options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+          <SegmentedOptions options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} />
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 h-9 bg-accent rounded-lg hover:bg-accent/80 transition-colors">
-            <LayoutGrid className="w-4 h-4" />
-            Kanban
-          </button>
-          <button className="flex items-center gap-2 px-4 h-9 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
-            <Plus className="w-4 h-4" />
-            New Task
-          </button>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex rounded-lg bg-accent p-1">
+            <button
+              type="button"
+              onClick={() => setView("table")}
+              className={`flex h-8 items-center gap-2 rounded-md px-3 text-sm ${view === "table" ? "bg-card shadow-sm" : ""}`}
+            >
+              <List className="h-4 w-4" />
+              Table
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("kanban")}
+              className={`flex h-8 items-center gap-2 rounded-md px-3 text-sm ${view === "kanban" ? "bg-card shadow-sm" : ""}`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Kanban
+            </button>
+          </div>
+          <form onSubmit={createTask} className="flex min-w-0 gap-2">
+            <input
+              value={newTaskTitle}
+              onChange={(event) => setNewTaskTitle(event.target.value)}
+              placeholder="New task..."
+              className="h-9 min-w-0 rounded-lg bg-input-background px-3 outline-none"
+            />
+            <button
+              type="submit"
+              disabled={isMutating}
+              className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              Add
+            </button>
+          </form>
         </div>
       </div>
 
-      {/* Table View */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted">
-              <tr className="border-b border-border">
-                <th className="text-left py-3 px-6 text-muted-foreground">
-                  <input type="checkbox" />
-                </th>
-                <th className="text-left py-3 px-6 text-muted-foreground">Task</th>
-                <th className="text-left py-3 px-6 text-muted-foreground">Priority</th>
-                <th className="text-left py-3 px-6 text-muted-foreground">Status</th>
-                <th className="text-left py-3 px-6 text-muted-foreground">Assignee</th>
-                <th className="text-left py-3 px-6 text-muted-foreground">Due Date</th>
-                <th className="text-left py-3 px-6 text-muted-foreground"></th>
+      {isLoading ? (
+        <StateBlock title="Loading tasks" description="Fetching current task status and owners." variant="loading" />
+      ) : error ? (
+        <StateBlock title="Tasks unavailable" description={error} actionLabel="Retry" onAction={reload} variant="error" />
+      ) : tasks.length === 0 ? (
+        <StateBlock title="No matching tasks" description="Adjust filters or add a task to start a new workflow." />
+      ) : view === "table" ? (
+        <TaskTable tasks={tasks} onCycleTask={cycleTask} isMutating={isMutating} />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {(Object.keys(groupedTasks) as TaskStatus[]).map((status) => (
+            <section key={status} className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-base">{status}</h3>
+                <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">{groupedTasks[status].length}</span>
+              </div>
+              <div className="space-y-3">
+                {groupedTasks[status].map((task) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    onClick={() => void cycleTask(task)}
+                    disabled={isMutating}
+                    className="w-full rounded-lg bg-muted p-3 text-left transition-colors hover:bg-accent disabled:opacity-60"
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <span>{task.title}</span>
+                      <PriorityBadge priority={task.priority} />
+                    </div>
+                    <div className="text-sm text-muted-foreground">{task.assignee}</div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SegmentedOptions({ options, value, onChange }: { options: string[]; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={`h-9 rounded-lg px-3 text-sm transition-colors ${
+            value === option ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground hover:bg-accent/80"
+          }`}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TaskTable({
+  tasks,
+  onCycleTask,
+  isMutating,
+}: {
+  tasks: WorkspaceTask[];
+  onCycleTask: (task: WorkspaceTask) => Promise<void>;
+  isMutating: boolean;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px]">
+          <thead className="bg-muted">
+            <tr className="border-b border-border">
+              <th className="px-5 py-3 text-left text-muted-foreground">Task</th>
+              <th className="px-5 py-3 text-left text-muted-foreground">Priority</th>
+              <th className="px-5 py-3 text-left text-muted-foreground">Status</th>
+              <th className="px-5 py-3 text-left text-muted-foreground">Assignee</th>
+              <th className="px-5 py-3 text-left text-muted-foreground">Due Date</th>
+              <th className="px-5 py-3 text-left text-muted-foreground">Source</th>
+              <th className="px-5 py-3 text-left text-muted-foreground" />
+            </tr>
+          </thead>
+          <tbody>
+            {tasks.map((task) => (
+              <tr key={task.id} className="border-b border-border transition-colors last:border-0 hover:bg-accent/50">
+                <td className="px-5 py-4">{task.title}</td>
+                <td className="px-5 py-4">
+                  <PriorityBadge priority={task.priority as TaskPriority} />
+                </td>
+                <td className="px-5 py-4">
+                  <button type="button" onClick={() => void onCycleTask(task)} disabled={isMutating} className="disabled:opacity-60">
+                    <StatusBadge status={task.status} />
+                  </button>
+                </td>
+                <td className="px-5 py-4 text-muted-foreground">{task.assignee}</td>
+                <td className="px-5 py-4 text-muted-foreground">{new Date(task.due).toLocaleDateString()}</td>
+                <td className="px-5 py-4 text-muted-foreground capitalize">{task.source}</td>
+                <td className="px-5 py-4">
+                  <button className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-accent">
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                <tr key={task.id} className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors">
-                  <td className="py-4 px-6">
-                    <input type="checkbox" />
-                  </td>
-                  <td className="py-4 px-6">{task.title}</td>
-                  <td className="py-4 px-6">
-                    <span
-                      className={`px-2 py-1 rounded text-sm ${
-                        task.priority === "High"
-                          ? "bg-red-100 text-red-700"
-                          : task.priority === "Medium"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}
-                    >
-                      {task.priority}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span
-                      className={`px-2 py-1 rounded text-sm ${
-                        task.status === "Completed"
-                          ? "bg-green-100 text-green-700"
-                          : task.status === "In Progress"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {task.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 text-muted-foreground">{task.assignee}</td>
-                  <td className="py-4 px-6 text-muted-foreground">{task.due}</td>
-                  <td className="py-4 px-6">
-                    <button className="w-8 h-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Optional Kanban Strip */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h3 className="mb-4">Quick Kanban View</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <div className="text-muted-foreground mb-2">Not Started ({tasks.filter((t) => t.status === "Not Started").length})</div>
-            <div className="space-y-2">
-              {tasks
-                .filter((t) => t.status === "Not Started")
-                .slice(0, 2)
-                .map((task) => (
-                  <div key={task.id} className="bg-muted p-3 rounded-lg">
-                    <div className="mb-1">{task.title}</div>
-                    <div className="text-sm text-muted-foreground">{task.assignee}</div>
-                  </div>
-                ))}
-            </div>
-          </div>
-          <div>
-            <div className="text-muted-foreground mb-2">In Progress ({tasks.filter((t) => t.status === "In Progress").length})</div>
-            <div className="space-y-2">
-              {tasks
-                .filter((t) => t.status === "In Progress")
-                .slice(0, 2)
-                .map((task) => (
-                  <div key={task.id} className="bg-muted p-3 rounded-lg">
-                    <div className="mb-1">{task.title}</div>
-                    <div className="text-sm text-muted-foreground">{task.assignee}</div>
-                  </div>
-                ))}
-            </div>
-          </div>
-          <div>
-            <div className="text-muted-foreground mb-2">Completed ({tasks.filter((t) => t.status === "Completed").length})</div>
-            <div className="space-y-2">
-              {tasks
-                .filter((t) => t.status === "Completed")
-                .slice(0, 2)
-                .map((task) => (
-                  <div key={task.id} className="bg-muted p-3 rounded-lg">
-                    <div className="mb-1">{task.title}</div>
-                    <div className="text-sm text-muted-foreground">{task.assignee}</div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
