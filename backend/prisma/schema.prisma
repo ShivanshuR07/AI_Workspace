@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum InsightKind {
+  DOCUMENT
+  MEETING
+  EMAIL
+  TASK
+  WORKSPACE
+}
+
+model User {
+  id               String          @id @default(uuid())
+  email            String          @unique
+  fullName         String?
+  hashedPassword   String?
+  workspaceId      String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  workspace        Workspace?      @relation("WorkspaceMembers", fields: [workspaceId], references: [id])
+  ownedWorkspaces  Workspace[]     @relation("WorkspaceOwner")
+  documents        Document[]
+  meetings         Meeting[]
+  emailDrafts      EmailDraft[]
+  assignedTasks    Task[]          @relation("AssignedTasks")
+  createdTasks     Task[]          @relation("CreatedTasks")
+  activityEvents   ActivityEvent[]
+}
+
+model Workspace {
+  id             String          @id @default(uuid())
+  name           String
+  ownerId        String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  owner          User?           @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members        User[]          @relation("WorkspaceMembers")
+  documents      Document[]
+  meetings       Meeting[]
+  emailThreads   EmailThread[]
+  tasks          Task[]
+  insights       Insight[]
+  activityEvents ActivityEvent[]
+}
+
+model Document {
+  id          String             @id @default(uuid())
+  workspaceId String
+  createdById String?
+  title       String
+  sourceUri   String?
+  mimeType    String?
+  status      DocumentStatus     @default(UPLOADED)
+  metadata    String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id])
+  createdBy   User?              @relation(fields: [createdById], references: [id])
+  chunks      DocumentChunk[]
+  analyses    DocumentAnalysis[]
+}
+
+model DocumentChunk {
+  id          String    @id @default(uuid())
+  documentId  String
+  chunkIndex  Int
+  content     String
+  tokenCount  Int?
+  embeddingId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model DocumentAnalysis {
+  id        String    @id @default(uuid())
+  documentId String
+  summary   String?
+  keyPoints String?
+  entities  String?
+  sentiment String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  document  Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model Meeting {
+  id           String             @id @default(uuid())
+  workspaceId  String
+  createdById  String?
+  title        String
+  scheduledAt  DateTime?
+  recordingUri String?
+  status       MeetingStatus      @default(SCHEDULED)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id])
+  createdBy    User?              @relation(fields: [createdById], references: [id])
+  transcript   MeetingTranscript?
+  summary      MeetingSummary?
+}
+
+model MeetingTranscript {
+  id        String    @id @default(uuid())
+  meetingId String    @unique
+  text      String
+  speakers  String?
+  language  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  meeting   Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+}
+
+model MeetingSummary {
+  id          String    @id @default(uuid())
+  meetingId   String    @unique
+  summary     String
+  decisions   String?
+  actionItems String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  meeting     Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+}
+
+model EmailThread {
+  id               String       @id @default(uuid())
+  workspaceId      String
+  externalThreadId String?
+  subject          String
+  participants     String?
+  lastMessageAt    DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  workspace        Workspace    @relation(fields: [workspaceId], references: [id])
+  drafts           EmailDraft[]
+}
+
+model EmailDraft {
+  id          String       @id @default(uuid())
+  threadId    String?
+  createdById String?
+  to          String?
+  cc          String?
+  subject     String?
+  body        String       @default("")
+  status      String       @default("draft")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  thread      EmailThread? @relation(fields: [threadId], references: [id])
+  createdBy   User?        @relation(fields: [createdById], references: [id])
+}
+
+model Task {
+  id          String      @id @default(uuid())
+  workspaceId String
+  createdById String?
+  assigneeId  String?
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  dueAt       DateTime?
+  sourceType  String?
+  sourceId    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
+  createdBy   User?        @relation("CreatedTasks", fields: [createdById], references: [id])
+  assignee    User?        @relation("AssignedTasks", fields: [assigneeId], references: [id])
+}
+
+model Insight {
+  id          String       @id @default(uuid())
+  workspaceId String
+  kind        InsightKind  @default(WORKSPACE)
+  title       String
+  body        String
+  confidence  Float?
+  sourceType  String?
+  sourceId    String?
+  metadata    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
+}
+
+model ActivityEvent {
+  id          String     @id @default(uuid())
+  workspaceId String
+  actorId     String?
+  eventType   String
+  entityType  String?
+  entityId    String?
+  payload     String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
+  actor       User?      @relation(fields: [actorId], references: [id])
+}
